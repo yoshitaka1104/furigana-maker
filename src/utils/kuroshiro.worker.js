@@ -1,3 +1,7 @@
+// Kuromoji は古いライブラリのため内部で window オブジェクトを参照します。
+// Web Worker 内には window が存在しないため、self (自分自身) を window として偽装させてエラーを防ぎます。
+self.window = self;
+
 import Kuroshiro from "kuroshiro";
 import KuromojiAnalyzer from "kuroshiro-analyzer-kuromoji";
 

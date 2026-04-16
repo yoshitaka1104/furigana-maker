@@ -19,6 +19,11 @@ function getWorker() {
                 delete resolvers[id];
             }
         };
+        workerInstance.onerror = (err) => {
+            console.error("Web Worker error:", err);
+            const errorMessage = err.message || "Worker crashed";
+            Object.values(resolvers).forEach(r => r.reject(new Error("Worker error: " + errorMessage)));
+        };
     }
     return workerInstance;
 }
