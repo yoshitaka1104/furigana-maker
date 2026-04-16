@@ -13,12 +13,12 @@ export async function initKuroshiro() {
     // Instantiate Kuroshiro
     const kuroshiro = new Kuroshiro();
     
-    // 辞書データ(17MB)のローカル参照時、KuromojiがNode.js互換モード(fs)で動いてフリーズするのを防ぐため、
-    // 明示的に "http" から始まるフルパス(URL)を指定して、ブラウザのXHR通信を強制します。
-    const localDictUrl = window.location.origin + "/dict/";
+    // 辞書展開時のフリーズを防ぐためCDNを利用します。
+    // （ローカルサーバー環境だとブラウザが自動解凍してしまい、Kuromoji内部での解凍処理と競合してエラーが隠蔽され、永遠に待機してしまうバグを回避するため）
+    const cdnDictUrl = "https://cdn.jsdelivr.net/npm/kuromoji@0.1.2/dict/";
     
     await kuroshiro.init(new KuromojiAnalyzer({
-        dictPath: localDictUrl
+        dictPath: cdnDictUrl
     }));
     
     kuroshiroInstance = kuroshiro;
