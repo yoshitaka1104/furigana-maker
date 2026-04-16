@@ -19,7 +19,6 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.1",
-    "vite": "^5.1.4",
-    "vite-plugin-static-copy": "^1.0.1"
+    "vite": "^5.1.4"
   }
 }
