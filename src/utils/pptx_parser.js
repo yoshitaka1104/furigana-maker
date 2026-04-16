@@ -13,9 +13,12 @@ export async function initKuroshiro() {
     // Instantiate Kuroshiro
     const kuroshiro = new Kuroshiro();
     
-    // Initialize with Kuromoji Analyzer pointing to the local dictionary files
+    // 辞書データ(17MB)のローカル参照時、KuromojiがNode.js互換モード(fs)で動いてフリーズするのを防ぐため、
+    // 明示的に "http" から始まるフルパス(URL)を指定して、ブラウザのXHR通信を強制します。
+    const localDictUrl = window.location.origin + "/dict/";
+    
     await kuroshiro.init(new KuromojiAnalyzer({
-        dictPath: "/dict/"
+        dictPath: localDictUrl
     }));
     
     kuroshiroInstance = kuroshiro;
@@ -93,7 +96,10 @@ export async function extractTextFromPptx(file) {
  * @param {Function} progressCallback - callback(progressString) for UI updates
  */
 export async function addFuriganaAndDownload(file, progressCallback) {
-    progressCallback("辞書データをダウンロード・初期化しています...");
+    progressCallback("辞書データ(17MB)を展開・初期化中...（ブラウザが数秒フリーズしたように見えますがそのままお待ちください！）");
+    // UIの描画を確実にトリガーさせるため、ほんの少し待機
+    await new Promise(resolve => setTimeout(resolve, 50));
+    
     const kuroshiro = await initKuroshiro();
     
     progressCallback("PPTXファイルを展開しています...");
@@ -113,6 +119,8 @@ export async function addFuriganaAndDownload(file, progressCallback) {
 
     for (let i = 0; i < slideFiles.length; i++) {
         progressCallback(`スライドを処理中... (${i + 1}/${slideFiles.length})`);
+        // UI描画のための待機
+        await new Promise(resolve => setTimeout(resolve, 10));
         
         const slideFile = slideFiles[i];
         const xmlText = await slideFile.async("text");
@@ -168,7 +176,9 @@ export async function addFuriganaAndDownload(file, progressCallback) {
  * @param {Function} progressCallback - callback(progressString) for UI updates
  */
 export async function generateAndDownloadHtmlFurigana(file, progressCallback) {
-    progressCallback("辞書データをダウンロード・初期化しています...");
+    progressCallback("辞書データ(17MB)を展開・初期化中...（ブラウザが数秒フリーズしたように見えますがそのままお待ちください！）");
+    await new Promise(resolve => setTimeout(resolve, 50));
+    
     const kuroshiro = await initKuroshiro();
     
     progressCallback("PPTXファイルを展開しています...");
@@ -193,6 +203,7 @@ export async function generateAndDownloadHtmlFurigana(file, progressCallback) {
 
     for (let i = 0; i < slideFiles.length; i++) {
         progressCallback(`スライドを処理中... (${i + 1}/${slideFiles.length})`);
+        await new Promise(resolve => setTimeout(resolve, 10)); // Yield
         
         const slideFile = slideFiles[i];
         const xmlText = await slideFile.async("text");
