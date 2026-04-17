@@ -1,27 +1,28 @@
 import JSZip from 'jszip';
-import Kuroshiro from "kuroshiro";
-import KuromojiAnalyzer from "kuroshiro-analyzer-kuromoji";
-
-let kuroshiroInstance = null;
 
 /**
- * Initialize Kuroshiro parsing engine
+ * Call Vercel Serverless API to convert text
  */
-export async function initKuroshiro() {
-    if (kuroshiroInstance) return kuroshiroInstance;
-    
-    // Instantiate Kuroshiro
-    const kuroshiro = new Kuroshiro();
-    
-    // 辞書展開時のフリーズを防ぐためCDNを利用します。
-    const cdnDictUrl = "https://cdn.jsdelivr.net/npm/kuromoji@0.1.2/dict/";
-    
-    await kuroshiro.init(new KuromojiAnalyzer({
-        dictPath: cdnDictUrl
-    }));
-    
-    kuroshiroInstance = kuroshiro;
-    return kuroshiroInstance;
+async function callFuriganaApi(texts, mode) {
+    try {
+        const response = await fetch('/api/furigana', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ texts, mode })
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'API Error');
+        }
+        
+        const data = await response.json();
+        return data.results;
+    } catch (err) {
+        console.error("API Call error:", err);
+        // Fallback to original texts if API fails
+        return texts;
+    }
 }
 
 /**
@@ -95,11 +96,10 @@ export async function extractTextFromPptx(file) {
  * @param {Function} progressCallback - callback(progressString) for UI updates
  */
 export async function addFuriganaAndDownload(file, progressCallback) {
-    progressCallback("辞書データ(17MB)を展開・初期化中...（ブラウザが数秒フリーズしたように見えますがそのままお待ちください！）");
-    // UIの描画を確実にトリガーさせるため待機
-    await new Promise(resolve => setTimeout(resolve, 50));
+    progressCallback("サーバーで処理の準備をしています...");
     
-    const kuroshiro = await initKuroshiro();
+    // APIサーバーへウォームアップ用の空リクエストを投げる
+    await fetch('/api/furigana', { method: 'POST', headers:{'Content-Type': 'application/json'}, body: JSON.stringify({texts: ["テスト"]}) }).catch(()=>null);
     
     progressCallback("PPTXファイルを展開しています...");
     const zip = new JSZip();
@@ -118,29 +118,35 @@ export async function addFuriganaAndDownload(file, progressCallback) {
 
     for (let i = 0; i < slideFiles.length; i++) {
         progressCallback(`スライドを処理中... (${i + 1}/${slideFiles.length})`);
-        // UI描画のための待機
-        await new Promise(resolve => setTimeout(resolve, 10));
         
         const slideFile = slideFiles[i];
         const xmlText = await slideFile.async("text");
         const xmlDoc = parser.parseFromString(xmlText, "text/xml");
         
-        // Extract text from <a:t> tags
         const textNodes = xmlDoc.getElementsByTagName("a:t");
         
+        // 変換対象のテキストを抽出
+        const textsToConvert = [];
         for (let j = 0; j < textNodes.length; j++) {
             const originalText = textNodes[j].textContent;
             if (originalText && originalText.trim().length > 0) {
-                try {
-                    // mode: "okurigana" generates 漢字(かんじ) format
-                    const convertedText = await kuroshiro.convert(originalText, { 
-                        to: "hiragana", 
-                        mode: "okurigana" 
-                    });
-                    textNodes[j].textContent = convertedText;
-                } catch (e) {
-                    console.warn("Kuroshiro conversion error for: " + originalText, e);
-                }
+                textsToConvert.push(originalText);
+            }
+        }
+        
+        // サーバーAPIで一括変換
+        let convertedTexts = [];
+        if (textsToConvert.length > 0) {
+            convertedTexts = await callFuriganaApi(textsToConvert, "okurigana");
+        }
+        
+        // 結果を元のXMLノードに適用
+        let convertIdx = 0;
+        for (let j = 0; j < textNodes.length; j++) {
+            const originalText = textNodes[j].textContent;
+            if (originalText && originalText.trim().length > 0) {
+                textNodes[j].textContent = convertedTexts[convertIdx] || originalText;
+                convertIdx++;
             }
         }
         
@@ -175,10 +181,8 @@ export async function addFuriganaAndDownload(file, progressCallback) {
  * @param {Function} progressCallback - callback(progressString) for UI updates
  */
 export async function generateAndDownloadHtmlFurigana(file, progressCallback) {
-    progressCallback("辞書データ(17MB)を展開・初期化中...（ブラウザが数秒フリーズしたように見えますがそのままお待ちください！）");
-    await new Promise(resolve => setTimeout(resolve, 50));
-    
-    const kuroshiro = await initKuroshiro();
+    progressCallback("サーバーで処理の準備をしています...");
+    await fetch('/api/furigana', { method: 'POST', headers:{'Content-Type': 'application/json'}, body: JSON.stringify({texts: ["テスト"]}) }).catch(()=>null);
     
     progressCallback("PPTXファイルを展開しています...");
     const zip = new JSZip();
@@ -202,7 +206,6 @@ export async function generateAndDownloadHtmlFurigana(file, progressCallback) {
 
     for (let i = 0; i < slideFiles.length; i++) {
         progressCallback(`スライドを処理中... (${i + 1}/${slideFiles.length})`);
-        await new Promise(resolve => setTimeout(resolve, 10)); // Yield
         
         const slideFile = slideFiles[i];
         const xmlText = await slideFile.async("text");
@@ -215,21 +218,34 @@ export async function generateAndDownloadHtmlFurigana(file, progressCallback) {
             const currentP = pNodes[j];
             let pText = "";
             const descendants = currentP.getElementsByTagName("*");
+            
+            // パラグラフ内のテキストを抽出
+            const textsToConvert = [];
             for (let k = 0; k < descendants.length; k++) {
                 const el = descendants[k];
                 if (el.nodeName === "a:t") {
                     const originalText = el.textContent;
                     if (originalText && originalText.trim().length > 0) {
-                        try {
-                            const convertedText = await kuroshiro.convert(originalText, { 
-                                to: "hiragana", 
-                                mode: "furigana" 
-                            });
-                            pText += convertedText;
-                        } catch (e) {
-                            console.warn("Kuroshiro conversion error for: " + originalText, e);
-                            pText += originalText;
-                        }
+                        textsToConvert.push(originalText);
+                    }
+                }
+            }
+            
+            // サーバーAPIで一括変換
+            let convertedTexts = [];
+            if (textsToConvert.length > 0) {
+                convertedTexts = await callFuriganaApi(textsToConvert, "furigana");
+            }
+            
+            // 結果を適用
+            let convertIdx = 0;
+            for (let k = 0; k < descendants.length; k++) {
+                const el = descendants[k];
+                if (el.nodeName === "a:t") {
+                    const originalText = el.textContent;
+                    if (originalText && originalText.trim().length > 0) {
+                        pText += convertedTexts[convertIdx] || originalText;
+                        convertIdx++;
                     } else {
                         pText += originalText;
                     }
