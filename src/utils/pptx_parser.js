@@ -1,54 +1,27 @@
 import JSZip from 'jszip';
-import KuroshiroWorker from './kuroshiro.worker.js?worker';
+import Kuroshiro from "kuroshiro";
+import KuromojiAnalyzer from "kuroshiro-analyzer-kuromoji";
 
-let workerInstance = null;
-let messageId = 0;
-const resolvers = {};
-
-function getWorker() {
-    if (!workerInstance) {
-        workerInstance = new KuroshiroWorker();
-        workerInstance.onmessage = (e) => {
-            const { id, type, result, error } = e.data;
-            if (resolvers[id]) {
-                if (type.endsWith('_ERROR')) {
-                    resolvers[id].reject(new Error(error));
-                } else {
-                    resolvers[id].resolve(result);
-                }
-                delete resolvers[id];
-            }
-        };
-        workerInstance.onerror = (err) => {
-            console.error("Web Worker error:", err);
-            const errorMessage = err.message || "Worker crashed";
-            Object.values(resolvers).forEach(r => r.reject(new Error("Worker error: " + errorMessage)));
-        };
-    }
-    return workerInstance;
-}
-
-function runInWorker(type, payload) {
-    return new Promise((resolve, reject) => {
-        const id = ++messageId;
-        resolvers[id] = { resolve, reject };
-        getWorker().postMessage({ id, type, payload });
-    });
-}
+let kuroshiroInstance = null;
 
 /**
- * Initialize Kuroshiro parsing engine via Web Worker
+ * Initialize Kuroshiro parsing engine
  */
 export async function initKuroshiro() {
-    await runInWorker('INIT');
-}
-
-/**
- * Convert text using Kuroshiro Web Worker
- */
-export async function convertText(text, options) {
-    if (!text || text.trim().length === 0) return text;
-    return await runInWorker('CONVERT', { text, options });
+    if (kuroshiroInstance) return kuroshiroInstance;
+    
+    // Instantiate Kuroshiro
+    const kuroshiro = new Kuroshiro();
+    
+    // 辞書展開時のフリーズを防ぐためCDNを利用します。
+    const cdnDictUrl = "https://cdn.jsdelivr.net/npm/kuromoji@0.1.2/dict/";
+    
+    await kuroshiro.init(new KuromojiAnalyzer({
+        dictPath: cdnDictUrl
+    }));
+    
+    kuroshiroInstance = kuroshiro;
+    return kuroshiroInstance;
 }
 
 /**
@@ -122,8 +95,11 @@ export async function extractTextFromPptx(file) {
  * @param {Function} progressCallback - callback(progressString) for UI updates
  */
 export async function addFuriganaAndDownload(file, progressCallback) {
-    progressCallback("辞書データ(17MB)を展開中...");
-    await initKuroshiro();
+    progressCallback("辞書データ(17MB)を展開・初期化中...（ブラウザが数秒フリーズしたように見えますがそのままお待ちください！）");
+    // UIの描画を確実にトリガーさせるため待機
+    await new Promise(resolve => setTimeout(resolve, 50));
+    
+    const kuroshiro = await initKuroshiro();
     
     progressCallback("PPTXファイルを展開しています...");
     const zip = new JSZip();
@@ -157,7 +133,7 @@ export async function addFuriganaAndDownload(file, progressCallback) {
             if (originalText && originalText.trim().length > 0) {
                 try {
                     // mode: "okurigana" generates 漢字(かんじ) format
-                    const convertedText = await convertText(originalText, { 
+                    const convertedText = await kuroshiro.convert(originalText, { 
                         to: "hiragana", 
                         mode: "okurigana" 
                     });
@@ -199,8 +175,10 @@ export async function addFuriganaAndDownload(file, progressCallback) {
  * @param {Function} progressCallback - callback(progressString) for UI updates
  */
 export async function generateAndDownloadHtmlFurigana(file, progressCallback) {
-    progressCallback("辞書データ(17MB)を展開中...");
-    await initKuroshiro();
+    progressCallback("辞書データ(17MB)を展開・初期化中...（ブラウザが数秒フリーズしたように見えますがそのままお待ちください！）");
+    await new Promise(resolve => setTimeout(resolve, 50));
+    
+    const kuroshiro = await initKuroshiro();
     
     progressCallback("PPTXファイルを展開しています...");
     const zip = new JSZip();
@@ -243,7 +221,7 @@ export async function generateAndDownloadHtmlFurigana(file, progressCallback) {
                     const originalText = el.textContent;
                     if (originalText && originalText.trim().length > 0) {
                         try {
-                            const convertedText = await convertText(originalText, { 
+                            const convertedText = await kuroshiro.convert(originalText, { 
                                 to: "hiragana", 
                                 mode: "furigana" 
                             });
