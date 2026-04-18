@@ -20,8 +20,8 @@ async function callFuriganaApi(texts, mode) {
         return data.results;
     } catch (err) {
         console.error("API Call error:", err);
-        // Fallback to original texts if API fails
-        return texts;
+        // エラーを握りつぶさずにフロントエンドのcatchブロックまで伝播させる
+        throw err;
     }
 }
 
