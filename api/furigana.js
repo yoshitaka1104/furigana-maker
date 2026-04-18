@@ -1,5 +1,6 @@
 import Kuroshiro from "kuroshiro";
 import KuromojiAnalyzer from "kuroshiro-analyzer-kuromoji";
+import path from "path";
 
 let kuroshiroInstance = null;
 let initPromise = null;
@@ -10,8 +11,9 @@ async function initKuroshiro() {
     if (!initPromise) {
         initPromise = (async () => {
             const kuroshiro = new Kuroshiro();
-            // VercelではNode.js環境でネイティブに動くため、辞書ファイルの特殊設定は不要です
-            await kuroshiro.init(new KuromojiAnalyzer());
+            // Vercel環境で辞書ファイルへの絶対パスを正しく指定する
+            const dictPath = path.join(process.cwd(), "node_modules", "kuromoji", "dict");
+            await kuroshiro.init(new KuromojiAnalyzer({ dictPath }));
             return kuroshiro;
         })();
     }
