@@ -142,11 +142,52 @@ export async function addFuriganaAndDownload(file, progressCallback) {
         
         // 結果を元のXMLノードに適用
         let convertIdx = 0;
-        for (let j = 0; j < textNodes.length; j++) {
-            const originalText = textNodes[j].textContent;
+        const tNodesArray = Array.from(textNodes);
+        
+        for (let j = 0; j < tNodesArray.length; j++) {
+            const tNode = tNodesArray[j];
+            const originalText = tNode.textContent;
             if (originalText && originalText.trim().length > 0) {
-                textNodes[j].textContent = convertedTexts[convertIdx] || originalText;
+                const convertedText = convertedTexts[convertIdx] || originalText;
                 convertIdx++;
+                
+                const rNode = tNode.parentNode;
+                // If it's not inside a run <a:r> for some reason, just replace text
+                if (!rNode || rNode.nodeName !== "a:r") {
+                    tNode.textContent = convertedText;
+                    continue;
+                }
+                
+                // "(ふりがな)" の部分をフォントサイズを2pt(200)小さくするために分割
+                const chunks = convertedText.split(/(\([^)]+\))/g);
+                
+                for (const chunk of chunks) {
+                    if (!chunk) continue;
+                    
+                    const newRNode = rNode.cloneNode(true);
+                    const newTNode = newRNode.getElementsByTagName("a:t")[0];
+                    if (newTNode) {
+                        newTNode.textContent = chunk;
+                    }
+                    
+                    // ふりがな（括弧で囲まれた部分）であればフォントサイズを小さくする
+                    if (chunk.startsWith('(') && chunk.endsWith(')')) {
+                        const rPrNode = newRNode.getElementsByTagName("a:rPr")[0];
+                        if (rPrNode && rPrNode.hasAttribute("sz")) {
+                            const originalSz = parseInt(rPrNode.getAttribute("sz"), 10);
+                            if (!isNaN(originalSz)) {
+                                // 2pt (200単位) 小さくする。最低フォントサイズを8pt(800)とする。
+                                const newSz = Math.max(800, originalSz - 200);
+                                rPrNode.setAttribute("sz", newSz.toString());
+                            }
+                        }
+                    }
+                    
+                    rNode.parentNode.insertBefore(newRNode, rNode);
+                }
+                
+                // 古いオリジナルの <a:r> ノードを削除
+                rNode.parentNode.removeChild(rNode);
             }
         }
         
