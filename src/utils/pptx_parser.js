@@ -176,8 +176,8 @@ export async function addFuriganaAndDownload(file, progressCallback) {
                         if (rPrNode && rPrNode.hasAttribute("sz")) {
                             const originalSz = parseInt(rPrNode.getAttribute("sz"), 10);
                             if (!isNaN(originalSz)) {
-                                // 2pt (200単位) 小さくする。最低フォントサイズを8pt(800)とする。
-                                const newSz = Math.max(800, originalSz - 200);
+                                // 8pt (800単位) 小さくする。最低フォントサイズを8pt(800)とする。
+                                const newSz = Math.max(800, originalSz - 800);
                                 rPrNode.setAttribute("sz", newSz.toString());
                             }
                         }
